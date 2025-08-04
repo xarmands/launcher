@@ -17,7 +17,7 @@ import { Server } from "../../utils/types";
 
 const ExternalServerHandler = () => {
   const [visible, showModal] = useState(false);
-  const { nickName, gtasaPath } = useSettings();
+  const { nickName } = useSettings();
   const { height, width } = useWindowDimensions();
   const { theme } = useTheme();
   const [serverAddress, setServerAddress] = useState("");
@@ -141,7 +141,7 @@ const ExternalServerHandler = () => {
         }
       }
 
-      startGame(serverInfo, nickName, gtasaPath, "");
+      startGame(serverInfo, nickName, "");
       showModal(false);
     }
   };

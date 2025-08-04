@@ -7,6 +7,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { open } from "@tauri-apps/api/dialog";
 import DropdownList from "../../components/DropdownList";
 import FeatureDisabledOverlay from "../../components/FeatureDisabledOverlay";
 import Icon from "../../components/Icon";
@@ -14,11 +15,12 @@ import StaticModal from "../../components/StaticModal";
 import Text from "../../components/Text";
 import { IN_GAME } from "../../constants/app";
 import { images } from "../../constants/images";
+import { useAppState } from "../../states/app";
 import { useJoinServerPrompt } from "../../states/joinServerPrompt";
 import { usePersistentServers, useServers } from "../../states/servers";
 import { useSettings } from "../../states/settings";
 import { useTheme } from "../../states/theme";
-import { startGame } from "../../utils/game";
+import { checkDirectoryValidity, startGame } from "../../utils/game";
 import {
   getSampVersionFromName,
   getSampVersionName,
@@ -39,12 +41,38 @@ const JoinServerPrompt = () => {
   const { updateServer } = useServers();
   const { height, width } = useWindowDimensions();
   const { theme, themeType } = useTheme();
+  const { hostOS } = useAppState();
   const [password, setPassword] = useState("");
   const [perServerVersion, setPerServerVersion] = useState<
     SAMPDLLVersions | undefined
   >();
   const [perServerNickname, setPerServerNickname] = useState("");
+  const [perServerGtasaPath, setPerServerGtasaPath] = useState("");
   const { nickName, gtasaPath, sampVersion, setSampVersion } = useSettings();
+
+  const selectPerServerGtaPath = async () => {
+    const currentPath = perServerGtasaPath || gtasaPath;
+    const selected: string = (await open({
+      defaultPath:
+        hostOS === "Windows_NT" ? currentPath.replace(/\//g, "\\") : currentPath,
+      directory: true,
+    })) as string;
+
+    if (selected) {
+      const newPath = selected.replace(/\\/g, "/");
+      const isDirValid = await checkDirectoryValidity(newPath);
+      if (isDirValid && server) {
+        setPerServerGtasaPath(newPath);
+        const settings = getServerSettings(server);
+        setServerSettings(
+          server,
+          settings?.nickname,
+          settings?.sampVersion,
+          newPath
+        );
+      }
+    }
+  };
 
   const settings = useMemo(() => {
     if (server) {
@@ -62,9 +90,14 @@ const JoinServerPrompt = () => {
       if (settings.sampVersion !== undefined) {
         setPerServerVersion(settings.sampVersion);
       }
+
+      if (settings.gtasaPath !== undefined) {
+        setPerServerGtasaPath(settings.gtasaPath);
+      }
     } else {
       setPerServerNickname("");
       setPerServerVersion(undefined);
+      setPerServerGtasaPath("");
     }
   }, [settings]);
 
@@ -98,7 +131,7 @@ const JoinServerPrompt = () => {
 
   const bigView = bannerUrl.length || logoUrl.length;
 
-  const HEIGHT = (server?.hasPassword ? 316 : 248) + (bigView ? 77 : 7);
+  const HEIGHT = (server?.hasPassword ? 316 : 248) + (bigView ? 77 : 7) + 60;
   const WIDTH = 320;
 
   return (
@@ -269,11 +302,14 @@ const JoinServerPrompt = () => {
               value={perServerNickname.length ? perServerNickname : nickName}
               onChangeText={(text) => {
                 if (server) {
-                  if (settings) {
-                    setServerSettings(server, text, settings.sampVersion);
-                  } else {
-                    setServerSettings(server, text, undefined);
-                  }
+                  const settings = getServerSettings(server);
+                  setPerServerNickname(text);
+                  setServerSettings(
+                    server,
+                    text,
+                    settings?.sampVersion,
+                    perServerGtasaPath || undefined
+                  );
                 }
               }}
               style={{
@@ -293,6 +329,63 @@ const JoinServerPrompt = () => {
                 outlineStyle: "none",
               }}
             />
+          </View>
+          <View style={{ marginTop: sc(15) }}>
+            <Text semibold color={theme.textPrimary} size={2}>
+              {t("gta_path")} ({t("optional")}):
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: sc(5) }}>
+              <TextInput
+                placeholderTextColor={theme.textPlaceholder}
+                placeholder={t("server_join_prompt_gtapath_input_placeholder")}
+                value={perServerGtasaPath.length ? perServerGtasaPath : gtasaPath}
+                onChangeText={(text) => {
+                  if (server) {
+                    const settings = getServerSettings(server);
+                    setPerServerGtasaPath(text);
+                    setServerSettings(
+                      server,
+                      settings?.nickname,
+                      settings?.sampVersion,
+                      text || undefined
+                    );
+                  }
+                }}
+                style={{
+                  fontFamily: "Proxima Nova Regular",
+                  fontSize: sc(17),
+                  color: perServerGtasaPath.length
+                    ? theme.textPrimary
+                    : `${theme.textPrimary}BB`,
+                  paddingHorizontal: sc(10),
+                  width: 240,
+                  fontStyle: perServerGtasaPath.length ? "normal" : "italic",
+                  backgroundColor: theme.textInputBackgroundColor,
+                  height: sc(38),
+                  borderRadius: sc(5),
+                  // @ts-ignore
+                  outlineStyle: "none",
+                }}
+              />
+              <TouchableOpacity
+                onPress={selectPerServerGtaPath}
+                style={{
+                  marginLeft: sc(10),
+                  width: sc(38),
+                  height: sc(38),
+                  backgroundColor: theme.primary,
+                  borderRadius: sc(5),
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Icon
+                  image={images.icons.settings}
+                  size={sc(20)}
+                  color="white"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
           <TouchableOpacity
             style={{
@@ -318,7 +411,6 @@ const JoinServerPrompt = () => {
                 startGame(
                   server,
                   perServerNickname.length ? perServerNickname : nickName,
-                  gtasaPath,
                   server.hasPassword ? password : ""
                 );
                 showPrompt(false);

@@ -79,10 +79,9 @@ const SettingsModal = () => {
             {t("settings_credits_made_by")}{" "}
             <Text
               size={2}
-              onPress={() => shell.open("https://open.mp/")}
               color={theme.primary}
             >
-              open.mp
+              armandd.
             </Text>{" "}
             |{" "}
             <Text

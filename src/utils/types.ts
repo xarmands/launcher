@@ -93,4 +93,5 @@ export interface PerServerSettings {
   ipPort: string;
   nickname?: string;
   sampVersion?: SAMPDLLVersions;
+  gtasaPath?: string;
 }

@@ -21,6 +21,14 @@ import { Log } from "./logger";
 import { sc } from "./sizeScaler";
 import { Server } from "./types";
 
+export const getGTAPathForServer = (server: Server): string => {
+  const { getServerSettings } = usePersistentServers.getState();
+  const { gtasaPath: globalGtasaPath } = useSettings.getState();
+  
+  const serverSettings = getServerSettings(server);
+  return serverSettings?.gtasaPath || globalGtasaPath;
+};
+
 export const copySharedFilesIntoGameFolder = async () => {
   const { gtasaPath } = useSettings.getState();
   const dir = await path.appLocalDataDir();
@@ -66,7 +74,6 @@ export const checkResourceFilesAvailability = async () => {
 export const startGame = async (
   server: Server,
   nickname: string,
-  gtasaPath: string,
   password: string
 ) => {
   if (IN_GAME) {
@@ -77,6 +84,7 @@ export const startGame = async (
     return;
   }
 
+  const gtasaPath = getGTAPathForServer(server);
   const { addToRecentlyJoined } = usePersistentServers.getState();
   const { showMessageBox, hideMessageBox } = useMessageBox.getState();
   const { show: showSettings } = useSettingsModal.getState();

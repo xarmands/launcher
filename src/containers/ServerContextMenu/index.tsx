@@ -18,7 +18,7 @@ const ContextMenu = () => {
   const { visible, position, server, hide } = useContextMenu();
   const { addToFavorites, removeFromFavorites, favorites } =
     usePersistentServers();
-  const { nickName, gtasaPath } = useSettings();
+  const { nickName } = useSettings();
 
   const [connectBtnBgCol, setConnectBtnBgCol] = useState(theme.secondary);
   const [favBtnBgCol, setFavBtnBgCol] = useState(theme.secondary);
@@ -79,7 +79,7 @@ const ContextMenu = () => {
             onHoverIn={() => setConnectBtnBgCol(theme.primary)}
             onHoverOut={() => setConnectBtnBgCol(theme.secondary)}
             onPress={() => {
-              startGame(server, nickName, gtasaPath, "");
+              startGame(server, nickName, "");
               hide();
             }}
             style={{

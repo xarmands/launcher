@@ -57,7 +57,7 @@ export default {
   settings_reset_application_data:
     "Reset application data (clears settings and lists)",
   settings_new_update_available: "⚠ New Update Available. Click to Download! ⚠",
-  settings_credits_made_by: "Made with ❤️ by",
+  settings_credits_made_by: "Edited by",
   settings_credits_view_source_on_github: "View source code on GitHub",
   update_modal_update_available_title: "Update Available!",
   update_modal_update_available_description:
@@ -113,4 +113,7 @@ export default {
   import_failed_title: "Import Failed",
   import_failed_description: "An error occurred while importing your favorite servers.",
   import_invalid_data_description: "The selected file contains invalid data. Please select a valid favorites list file.",
+  gta_path: "GTA Path",
+  optional: "optional",
+  server_join_prompt_gtapath_input_placeholder: "Use global GTA path or set server-specific path",
 };

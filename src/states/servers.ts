@@ -30,7 +30,8 @@ interface ServersPersistentState {
   setServerSettings: (
     server: Server,
     nickname: string | undefined,
-    version: SAMPDLLVersions | undefined
+    version: SAMPDLLVersions | undefined,
+    gtasaPath: string | undefined
   ) => void;
   getServerSettings: (server: Server) => PerServerSettings | undefined;
 }
@@ -173,7 +174,7 @@ const usePersistentServers = create<ServersPersistentState>()(
 
           return { recentlyJoined: list };
         }),
-      setServerSettings: (server, nickname, version) =>
+      setServerSettings: (server, nickname, version, gtasaPath) =>
         set(() => {
           const list = [...get().perServerSettings];
 
@@ -185,12 +186,14 @@ const usePersistentServers = create<ServersPersistentState>()(
               ipPort: `${server.ip}:${server.port}`,
               nickname,
               sampVersion: version,
+              gtasaPath,
             };
           } else {
             list.push({
               ipPort: `${server.ip}:${server.port}`,
               nickname,
               sampVersion: version,
+              gtasaPath,
             });
           }
 
