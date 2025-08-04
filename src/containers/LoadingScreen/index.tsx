@@ -331,6 +331,9 @@ const LoadingScreen = (props: { onEnd: () => void }) => {
         <Text semibold size={3} color={theme.textPrimary}>
           Getting ready to launch...
         </Text>
+        <Text semibold size={2} color={theme.textSecondary} style={{ marginTop: sc(8) }}>
+          Armand Client Launching
+        </Text>
         <View style={{ flex: 1 }} />
         {downloading ? (
           <>
