@@ -96,15 +96,15 @@ impl Query {
         };
 
         let data = Self {
-            address: address.parse::<Ipv4Addr>().unwrap(),
+            address: address.parse::<Ipv4Addr>().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Invalid IP address: {}", e)))?,
             port,
-            socket: UdpSocket::bind("0.0.0.0:0").await.unwrap(),
+            socket: UdpSocket::bind("0.0.0.0:0").await.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to bind UDP socket: {}", e)))?,
         };
 
         data.socket
             .connect(format!("{}:{}", addr, port))
             .await
-            .unwrap();
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to connect to server: {}", e)))?;
         Ok(data)
     }
 

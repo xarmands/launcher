@@ -42,15 +42,35 @@ fn get_checksum_of_files(list: Vec<String>) -> Vec<String> {
     let mut result = Vec::<String>::new();
     for file in list {
         let file_path = file.to_owned();
-        let mut f = File::open(file_path).unwrap();
-        let mut contents = Vec::<u8>::new();
-        f.read_to_end(&mut contents).unwrap();
-        let digest = compute(contents.as_slice());
-        let mut combine = String::new();
-        combine.push_str(file.as_str());
-        combine.push('|');
-        combine.push_str(format!("{:x}", digest).as_str());
-        result.push(combine.to_string());
+        match File::open(&file_path) {
+            Ok(mut f) => {
+                let mut contents = Vec::<u8>::new();
+                match f.read_to_end(&mut contents) {
+                    Ok(_) => {
+                        let digest = compute(contents.as_slice());
+                        let mut combine = String::new();
+                        combine.push_str(file.as_str());
+                        combine.push('|');
+                        combine.push_str(format!("{:x}", digest).as_str());
+                        result.push(combine.to_string());
+                    }
+                    Err(e) => {
+                        let mut combine = String::new();
+                        combine.push_str(file.as_str());
+                        combine.push_str("|error_reading_file:");
+                        combine.push_str(&e.to_string());
+                        result.push(combine.to_string());
+                    }
+                }
+            }
+            Err(e) => {
+                let mut combine = String::new();
+                combine.push_str(file.as_str());
+                combine.push_str("|error_opening_file:");
+                combine.push_str(&e.to_string());
+                result.push(combine.to_string());
+            }
+        }
     }
     result
 }
@@ -107,7 +127,9 @@ async fn rpc_handler(
 }
 
 pub async fn initialize_rpc() -> Result<(), std::io::Error> {
-    HttpServer::new(|| {
+    println!("Initializing RPC server on 127.0.0.1:46290");
+    
+    let server = HttpServer::new(|| {
         App::new()
             .wrap(Cors::permissive())
             .service(
@@ -115,8 +137,16 @@ pub async fn initialize_rpc() -> Result<(), std::io::Error> {
                     .route(web::post().to(nativestorage::sync_storage_rpc_handler)),
             )
             .service(web::resource("/rpc/{method}").route(web::post().to(rpc_handler)))
-    })
-    .bind("127.0.0.1:46290")?
-    .run()
-    .await
+    });
+
+    match server.bind("127.0.0.1:46290") {
+        Ok(bound_server) => {
+            println!("RPC server successfully bound to port 46290");
+            bound_server.run().await
+        }
+        Err(e) => {
+            println!("Failed to bind RPC server to port 46290: {}. RPC functionality will be disabled.", e);
+            Err(e)
+        }
+    }
 }

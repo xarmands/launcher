@@ -43,14 +43,26 @@ fn create_overlay_window(
 
 pub fn listen_for_ipc(app_handle: AppHandle) {
     thread::spawn(move || {
-        let listener = TcpListener::bind("127.0.0.1:45791").expect("Failed to bind to port 45791");
+        let listener = match TcpListener::bind("127.0.0.1:45791") {
+            Ok(listener) => listener,
+            Err(e) => {
+                println!("Failed to bind to port 45791: {}. IPC functionality will be disabled.", e);
+                return;
+            }
+        };
 
         for stream in listener.incoming() {
             if let Ok(stream) = stream {
                 let handle = app_handle.clone();
 
                 thread::spawn(move || {
-                    let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+                    let mut reader = match stream.try_clone() {
+                        Ok(cloned_stream) => std::io::BufReader::new(cloned_stream),
+                        Err(e) => {
+                            println!("Failed to clone stream: {}", e);
+                            return;
+                        }
+                    };
                     let mut line = String::new();
                     while let Ok(bytes) = reader.read_line(&mut line) {
                         if bytes == 0 {
@@ -62,10 +74,11 @@ pub fn listen_for_ipc(app_handle: AppHandle) {
                                 .strip_prefix("init:")
                                 .and_then(|s| s.trim().parse::<i32>().ok())
                             {
-                                GAME_STREAMS
-                                    .lock()
-                                    .unwrap()
-                                    .insert(pid, stream.try_clone().unwrap());
+                                if let Ok(mut streams) = GAME_STREAMS.lock() {
+                                    if let Ok(cloned_stream) = stream.try_clone() {
+                                        streams.insert(pid, cloned_stream);
+                                    }
+                                }
                             }
                         } else {
                             if line.starts_with("pos:") {
@@ -97,23 +110,28 @@ pub fn listen_for_ipc(app_handle: AppHandle) {
                                 }
                             } else if line.starts_with("show_overlay:") {
                                 let parts: Vec<_> = line.trim().split(':').collect();
-                                create_overlay_window(
-                                    &handle,
-                                    format!("omp_overlay_window:{}", parts[1]).as_str(),
-                                    parts[1].parse::<i32>().unwrap(),
-                                )
-                                .unwrap();
+                                if parts.len() >= 2 {
+                                    if let Ok(pid) = parts[1].parse::<i32>() {
+                                        let _ = create_overlay_window(
+                                            &handle,
+                                            format!("omp_overlay_window:{}", pid).as_str(),
+                                            pid,
+                                        );
+                                    }
+                                }
                             } else if line.starts_with("hide_overlay:") {
                                 let parts: Vec<_> = line.trim().split(':').collect();
-                                if let Some(window) = handle
-                                    .get_window(format!("omp_overlay_window:{}", parts[1]).as_str())
-                                {
-                                    let _ = window.close();
-                                } else {
-                                    println!(
-                                        "hidden_overlay: window not found: {}",
-                                        format!("omp_overlay_window:{}", parts[1]).as_str()
-                                    );
+                                if parts.len() >= 2 {
+                                    if let Some(window) = handle
+                                        .get_window(format!("omp_overlay_window:{}", parts[1]).as_str())
+                                    {
+                                        let _ = window.close();
+                                    } else {
+                                        println!(
+                                            "hidden_overlay: window not found: {}",
+                                            format!("omp_overlay_window:{}", parts[1]).as_str()
+                                        );
+                                    }
                                 }
                             } else {
                                 println!("Unknown IPC command: {line}");

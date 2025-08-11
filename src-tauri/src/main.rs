@@ -74,7 +74,10 @@ async fn main() {
         deeplink::prepare("mp.open.launcher");
     }
 
-    simple_logging::log_to_file("omp-launcher.log", LevelFilter::Info).unwrap();
+    if let Err(e) = simple_logging::log_to_file("omp-launcher.log", LevelFilter::Info) {
+        eprintln!("Failed to initialize logging to file: {}", e);
+        simple_logging::log_to_stderr(LevelFilter::Info);
+    }
 
     #[cfg(windows)]
     {
@@ -109,29 +112,52 @@ Options:
             }
 
             if args.host.is_some() && args.name.is_some() && args.port.is_some() {
-                if args.gamepath.is_some() && args.gamepath.as_ref().unwrap().len() > 0 {
-                    let password: String = if args.password.is_some() {
-                        args.password.unwrap()
-                    } else {
-                        "".to_string()
-                    };
-                    let _ = run_samp(
-                        args.name.unwrap().as_str(),
-                        args.host.unwrap().as_str(),
-                        args.port.unwrap(),
-                        args.gamepath.as_ref().unwrap().as_str(),
-                        format!("{}/samp.dll", args.gamepath.as_ref().unwrap()).as_str(),
-                        format!(
-                            "{}/mp.open.launcher/omp/omp-client.dll",
-                            dirs_next::data_local_dir().unwrap().to_str().unwrap()
+                if let Some(gamepath) = &args.gamepath {
+                    if !gamepath.is_empty() {
+                        let password: String = args.password.unwrap_or_default();
+                        
+                        let name = args.name.as_deref().unwrap();
+                        let host = args.host.as_deref().unwrap();
+                        let port = args.port.unwrap();
+                        let gamepath_str = gamepath.as_str();
+                        let samp_dll_path = format!("{}/samp.dll", gamepath);
+                        
+                        let data_dir = match dirs_next::data_local_dir() {
+                            Some(dir) => dir,
+                            None => {
+                                error!("Could not determine local data directory");
+                                exit(1);
+                            }
+                        };
+                        
+                        let data_dir_str = match data_dir.to_str() {
+                            Some(s) => s,
+                            None => {
+                                error!("Local data directory path contains invalid characters");
+                                exit(1);
+                            }
+                        };
+                        
+                        let omp_client_path = format!("{}/mp.open.launcher/omp/omp-client.dll", data_dir_str);
+                        
+                        let _ = run_samp(
+                            name,
+                            host,
+                            port,
+                            gamepath_str,
+                            &samp_dll_path,
+                            &omp_client_path,
+                            &password,
+                            true,
                         )
-                        .as_str(),
-                        &password,
-                        true,
-                    )
-                    .await;
-                    info!("Attempted to run the game from command line");
-                    exit(0)
+                        .await;
+                        info!("Attempted to run the game from command line");
+                        exit(0)
+                    } else {
+                        println!("You must provide game path using --game or -g. Read more about arguments in --help");
+                        info!("You must provide game path using --game or -g. Read more about arguments in --help");
+                        exit(0)
+                    }
                 } else {
                     println!("You must provide game path using --game or -g. Read more about arguments in --help");
                     info!("You must provide game path using --game or -g. Read more about arguments in --help");
@@ -160,18 +186,33 @@ Options:
 
     initialize_background_thread();
     std::thread::spawn(move || {
-        let rt = actix_rt::Runtime::new().unwrap();
-        let _ = rt.block_on(rpcs::initialize_rpc());
+        match actix_rt::Runtime::new() {
+            Ok(rt) => {
+                if let Err(e) = rt.block_on(rpcs::initialize_rpc()) {
+                    error!("RPC server failed to start: {}", e);
+                }
+            }
+            Err(e) => {
+                error!("Failed to create actix runtime: {}", e);
+            }
+        }
     });
 
     match tauri::Builder::default()
         .plugin(tauri_plugin_upload::init())
         .setup(|app| {
             let handle = app.handle();
-            let main_window = app.get_window("main").unwrap();
-            main_window
-                .set_min_size(Some(PhysicalSize::new(1000, 700)))
-                .unwrap();
+            let main_window = match app.get_window("main") {
+                Some(window) => window,
+                None => {
+                    error!("Failed to get main window");
+                    return Err("Main window not found".into());
+                }
+            };
+            
+            if let Err(e) = main_window.set_min_size(Some(PhysicalSize::new(1000, 700))) {
+                error!("Failed to set minimum window size: {}", e);
+            }
 
             let config = handle.config();
             if let Some(path) = app_data_dir(&config) {
@@ -185,24 +226,30 @@ Options:
                 let handle = app.handle();
                 let handle2 = app.handle();
 
-                deeplink::register("omp", move |request| {
+                if let Err(e) = deeplink::register("omp", move |request| {
                     dbg!(&request);
-                    let mut uri_scheme_value = URI_SCHEME_VALUE.lock().unwrap();
-                    *uri_scheme_value = String::from(request.as_str());
-                    handle.emit_all("scheme-request-received", request).unwrap();
-                })
-                .unwrap();
+                    if let Ok(mut uri_scheme_value) = URI_SCHEME_VALUE.lock() {
+                        *uri_scheme_value = String::from(request.as_str());
+                        if let Err(emit_err) = handle.emit_all("scheme-request-received", request) {
+                            error!("Failed to emit scheme request: {}", emit_err);
+                        }
+                    }
+                }) {
+                    error!("Failed to register omp deeplink handler: {}", e);
+                }
 
-                deeplink::register("samp", move |request| {
+                if let Err(e) = deeplink::register("samp", move |request| {
                     dbg!(&request);
-                    let mut uri_scheme_value = URI_SCHEME_VALUE.lock().unwrap();
-                    (*uri_scheme_value).clone_from(&request);
-                    *uri_scheme_value = String::from(request.as_str());
-                    handle2
-                        .emit_all("scheme-request-received", request)
-                        .unwrap();
-                })
-                .unwrap();
+                    if let Ok(mut uri_scheme_value) = URI_SCHEME_VALUE.lock() {
+                        (*uri_scheme_value).clone_from(&request);
+                        *uri_scheme_value = String::from(request.as_str());
+                        if let Err(emit_err) = handle2.emit_all("scheme-request-received", request) {
+                            error!("Failed to emit scheme request: {}", emit_err);
+                        }
+                    }
+                }) {
+                    error!("Failed to register samp deeplink handler: {}", e);
+                }
             }
 
             ipc::listen_for_ipc(handle);

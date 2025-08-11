@@ -89,22 +89,55 @@ const App = () => {
     initializeApp();
 
     if (IN_GAME) {
-      setInterval(async () => {
-        if ((await checkIfProcessAlive(IN_GAME_PROCESS_ID)) == false) {
-          invoke("send_message_to_game", {
-            id: IN_GAME_PROCESS_ID,
-            message: "close_overlay",
-          });
-          setTimeout(() => {
-            appWindow.close();
-          }, 300);
+      let consecutiveFailures = 0;
+      const maxFailures = 3;
+      
+      const intervalId = setInterval(async () => {
+        try {
+          const isAlive = await checkIfProcessAlive(IN_GAME_PROCESS_ID);
+          if (isAlive) {
+            consecutiveFailures = 0;
+          } else {
+            consecutiveFailures++;
+            console.warn(`Process ${IN_GAME_PROCESS_ID} check failed ${consecutiveFailures}/${maxFailures} times`);
+            
+            if (consecutiveFailures >= maxFailures) {
+              console.log("Process confirmed dead after multiple checks, closing overlay");
+              invoke("send_message_to_game", {
+                id: IN_GAME_PROCESS_ID,
+                message: "close_overlay",
+              }).catch(err => console.error("Failed to send close message:", err));
+              
+              setTimeout(() => {
+                appWindow.close().catch(err => console.error("Failed to close window:", err));
+              }, 300);
+              
+              clearInterval(intervalId);
+            }
+          }
+        } catch (error) {
+          console.error("Error checking process alive status:", error);
+          consecutiveFailures++;
+          
+          if (consecutiveFailures >= maxFailures) {
+            console.log("Too many consecutive errors checking process, assuming dead");
+            setTimeout(() => {
+              appWindow.close().catch(err => console.error("Failed to close window:", err));
+            }, 300);
+            clearInterval(intervalId);
+          }
         }
-      }, 200);
+      }, 1000);
+      
+      return () => {
+        clearInterval(intervalId);
+        if (killResizeListener) killResizeListener();
+      };
+    } else {
+      return () => {
+        if (killResizeListener) killResizeListener();
+      };
     }
-
-    return () => {
-      if (killResizeListener) killResizeListener();
-    };
   }, []);
 
   if (loading) {
